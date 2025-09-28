@@ -1,0 +1,108 @@
+name: Build and Release LuCI App
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*' # Push events to new tags like v1.0.0
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build for OpenWrt
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up build environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential libncurses5-dev gawk git subversion libssl-dev gettext unzip wget curl
+      
+    - name: Clone OpenWrt SDK
+      run: |
+        # Use a recent OpenWrt release
+        wget https://downloads.openwrt.org/releases/23.05.4/targets/x86/64/openwrt-sdk-23.05.4-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
+        tar -xf openwrt-sdk-23.05.4-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
+        mv openwrt-sdk-23.05.4-x86-64_gcc-12.3.0_musl.Linux-x86_64 openwrt-sdk
+      
+    - name: Prepare package structure
+      run: |
+        mkdir -p openwrt-sdk/package/luci-app-ndsvoucher
+        cp -r luci-app-ndsvoucher/* openwrt-sdk/package/luci-app-ndsvoucher/
+      
+    - name: Build package
+      run: |
+        cd openwrt-sdk
+        # Update feeds
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        
+        # Configure the build to include our package
+        echo "CONFIG_PACKAGE_luci-app-ndsvoucher=y" > .config
+        make defconfig
+        
+        # Build the package
+        make package/luci-app-ndsvoucher/compile V=s
+        
+        # Verify the package was built
+        if [ ! -f "bin/packages/*/luci/luci-app-ndsvoucher*.ipk" ]; then
+          echo "Package build failed: IPK file not found"
+          exit 1
+        fi
+      
+    - name: Collect IPK files
+      run: |
+        # Find the built IPK files
+        find openwrt-sdk/bin -name "luci-app-ndsvoucher*.ipk" -exec cp {} . \;
+        
+        # Check if we found any IPK files
+        if [ ! -f "luci-app-ndsvoucher*.ipk" ]; then
+          echo "No IPK files found!"
+          ls -R openwrt-sdk/bin/
+          exit 1
+        fi
+        
+        # Create checksums
+        for ipk in luci-app-ndsvoucher*.ipk; do
+          if [ -f "$ipk" ]; then
+            sha256sum "$ipk" > "${ipk}.sha256"
+          fi
+        done
+      
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: luci-app-ndsvoucher-ipk
+        path: |
+          luci-app-ndsvoucher*.ipk
+          luci-app-ndsvoucher*.ipk.sha256
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download all build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: List downloaded artifacts
+      run: ls -R artifacts
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/luci-app-ndsvoucher-ipk/luci-app-ndsvoucher*.ipk
+          artifacts/luci-app-ndsvoucher-ipk/luci-app-ndsvoucher*.ipk.sha256
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

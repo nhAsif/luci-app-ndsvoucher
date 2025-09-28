@@ -1,0 +1,4 @@
+config general
+	option admin_password 'rosepinepink'
+	option port '7891'
+	option data_dir '/data'

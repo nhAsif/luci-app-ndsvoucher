@@ -1,0 +1,23 @@
+#!/bin/sh
+
+# Create data directory
+mkdir -p /data
+
+# Initialize database files if they don't exist
+if [ ! -f /data/voucher.json ]; then
+    echo "[]" > /data/voucher.json
+fi
+
+if [ ! -f /data/settings.json ]; then
+    echo "{\"admin_password\": \"rosepinepink\"}" > /data/settings.json
+fi
+
+# Configure NoDogSplash for the voucher system
+/usr/share/ndsvoucher/scripts/configure-nodogsplash.sh
+
+# Enable and start our service
+/etc/init.d/ndsvoucher enable
+/etc/init.d/ndsvoucher start
+
+# Clean up
+rm -f /etc/uci-defaults/99-ndsvoucher

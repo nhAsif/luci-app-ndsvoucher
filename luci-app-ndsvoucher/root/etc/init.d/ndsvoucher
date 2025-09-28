@@ -1,0 +1,32 @@
+#!/bin/sh /etc/rc.common
+
+START=99
+STOP=10
+
+SERVICE_USE_PID=1
+SERVICE_WRITE_PID=1
+SERVICE_DAEMONIZE=1
+
+start() {
+    # Create data directory
+    mkdir -p /data
+    
+    # Initialize database files if they don't exist
+    if [ ! -f /data/voucher.json ]; then
+        echo "[]" > /data/voucher.json
+    fi
+    
+    if [ ! -f /data/settings.json ]; then
+        echo "{}" > /data/settings.json
+    fi
+}
+
+stop() {
+    # Nothing to do here
+    return 0
+}
+
+restart() {
+    stop
+    start
+}

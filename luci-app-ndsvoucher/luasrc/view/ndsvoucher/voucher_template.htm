@@ -1,0 +1,140 @@
+<%#
+LuCI NDS Voucher Template
+%>
+
+<%+header%>
+
+<h2><%:NDS Voucher System%></h2>
+
+<div class="cbi-map">
+    <div class="cbi-section">
+        <h3><%:Voucher Management%></h3>
+        
+        <div class="cbi-section-node">
+            <div class="cbi-value">
+                <label class="cbi-value-title"><%:Total Vouchers%></label>
+                <div class="cbi-value-field">
+                    <span id="total-vouchers">0</span>
+                </div>
+            </div>
+            
+            <div class="cbi-value">
+                <label class="cbi-value-title"><%:Active Vouchers%></label>
+                <div class="cbi-value-field">
+                    <span id="active-vouchers">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="cbi-section">
+        <h3><%:Add New Voucher%></h3>
+        
+        <div class="cbi-section-node">
+            <div class="cbi-value">
+                <label class="cbi-value-title"><%:Name%></label>
+                <div class="cbi-value-field">
+                    <input type="text" id="voucher-name" class="cbi-input-text" />
+                </div>
+            </div>
+            
+            <div class="cbi-value">
+                <label class="cbi-value-title"><%:Code%></label>
+                <div class="cbi-value-field">
+                    <input type="text" id="voucher-code" class="cbi-input-text" placeholder="<%:Leave blank for auto-generated%>" />
+                </div>
+            </div>
+            
+            <div class="cbi-value">
+                <label class="cbi-value-title"><%:Duration (minutes)%></label>
+                <div class="cbi-value-field">
+                    <input type="number" id="voucher-duration" class="cbi-input-text" value="60" />
+                </div>
+            </div>
+            
+            <div class="cbi-value">
+                <label class="cbi-value-title"><%:Reusable%></label>
+                <div class="cbi-value-field">
+                    <input type="checkbox" id="voucher-reusable" class="cbi-input-checkbox" />
+                </div>
+            </div>
+            
+            <div class="cbi-value">
+                <div class="cbi-value-field">
+                    <input type="button" id="add-voucher" class="cbi-button cbi-button-add" value="<%:Add Voucher%>" />
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="cbi-section">
+        <h3><%:Existing Vouchers%></h3>
+        
+        <div class="cbi-section-node">
+            <table class="cbi-section-table">
+                <thead>
+                    <tr class="tr cbi-section-table-titles">
+                        <th class="th cbi-section-table-cell"><%:Name%></th>
+                        <th class="th cbi-section-table-cell"><%:Code%></th>
+                        <th class="th cbi-section-table-cell"><%:Duration%></th>
+                        <th class="th cbi-section-table-cell"><%:Status%></th>
+                        <th class="th cbi-section-table-cell"><%:Actions%></th>
+                    </tr>
+                </thead>
+                <tbody id="voucher-list">
+                    <tr class="tr placeholder">
+                        <td class="td" colspan="5"><%:No vouchers found%></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script type="text/javascript">
+//<![CDATA[
+    // Load vouchers on page load
+    window.addEventListener('load', function() {
+        loadVouchers();
+    });
+    
+    // Add voucher button click handler
+    document.getElementById('add-voucher').addEventListener('click', function() {
+        addVoucher();
+    });
+    
+    // Load vouchers from API
+    function loadVouchers() {
+        // In a real implementation, this would fetch from the API
+        updateVoucherStats();
+    }
+    
+    // Add a new voucher
+    function addVoucher() {
+        var name = document.getElementById('voucher-name').value;
+        var code = document.getElementById('voucher-code').value;
+        var duration = document.getElementById('voucher-duration').value;
+        var reusable = document.getElementById('voucher-reusable').checked ? '1' : '0';
+        
+        // In a real implementation, this would call the API
+        alert('Voucher would be added here');
+    }
+    
+    // Delete a voucher
+    function deleteVoucher(id) {
+        if (confirm('<%:Are you sure you want to delete this voucher?%>')) {
+            // In a real implementation, this would call the API
+            alert('Voucher would be deleted here');
+        }
+    }
+    
+    // Update voucher statistics
+    function updateVoucherStats() {
+        // In a real implementation, this would fetch stats from the API
+        document.getElementById('total-vouchers').textContent = '0';
+        document.getElementById('active-vouchers').textContent = '0';
+    }
+//]]>
+</script>
+
+<%+footer%>
