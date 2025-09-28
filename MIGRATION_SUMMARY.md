@@ -1,5 +1,7 @@
 # Migration Summary: From Go Implementation to LuCI App
 
+Version: 1.0.0
+
 ## Overview
 
 This document summarizes the migration from the original Go-based RoseNet Access Portal implementation to the new LuCI app implementation.

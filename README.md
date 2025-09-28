@@ -2,6 +2,11 @@
 
 ## OpenWrt WiFi Voucher System
 
+Version: 1.0.0
+![Release](https://img.shields.io/badge/Release-v1.0.0-orange.svg)
+
+![Release](https://img.shields.io/badge/Release-v1.0.0-orange.svg)
+
 RoseNet Access Portal is a comprehensive, self-contained voucher authentication system designed for Wi-Fi users on OpenWrt routers. It provides a robust and lightweight solution for managing internet access through a captive portal, implemented as a LuCI application with shell script backend and seamless integration with NoDogSplash.
 
 **Note: This repository now contains two implementations:**

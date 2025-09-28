@@ -1,108 +1,108 @@
 name: Build and Release LuCI App
 
-on:
+on: 
   push:
     branches:
       - main
-    tags:
-      - 'v*' # Push events to new tags like v1.0.0
+    paths:
+      - 'luci-app-ndsvoucher/Makefile'
   workflow_dispatch:
+  release:
+    types: [published]
+  schedule:
+    - cron: '0 2 * * 1'  # Run every Monday at 2 AM UTC
 
 jobs:
-  build:
-    name: Build for OpenWrt
+  Get-Version:
     runs-on: ubuntu-latest
-    
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up build environment
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential libncurses5-dev gawk git subversion libssl-dev gettext unzip wget curl
-      
-    - name: Clone OpenWrt SDK
-      run: |
-        # Use a recent OpenWrt release
-        wget https://downloads.openwrt.org/releases/23.05.4/targets/x86/64/openwrt-sdk-23.05.4-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
-        tar -xf openwrt-sdk-23.05.4-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
-        mv openwrt-sdk-23.05.4-x86-64_gcc-12.3.0_musl.Linux-x86_64 openwrt-sdk
-      
-    - name: Prepare package structure
-      run: |
-        mkdir -p openwrt-sdk/package/luci-app-ndsvoucher
-        cp -r luci-app-ndsvoucher/* openwrt-sdk/package/luci-app-ndsvoucher/
-      
-    - name: Build package
-      run: |
-        cd openwrt-sdk
-        # Update feeds
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
-        
-        # Configure the build to include our package
-        echo "CONFIG_PACKAGE_luci-app-ndsvoucher=y" > .config
-        make defconfig
-        
-        # Build the package
-        make package/luci-app-ndsvoucher/compile V=s
-        
-        # Verify the package was built
-        if [ ! -f "bin/packages/*/luci/luci-app-ndsvoucher*.ipk" ]; then
-          echo "Package build failed: IPK file not found"
-          exit 1
-        fi
-      
-    - name: Collect IPK files
-      run: |
-        # Find the built IPK files
-        find openwrt-sdk/bin -name "luci-app-ndsvoucher*.ipk" -exec cp {} . \;
-        
-        # Check if we found any IPK files
-        if [ ! -f "luci-app-ndsvoucher*.ipk" ]; then
-          echo "No IPK files found!"
-          ls -R openwrt-sdk/bin/
-          exit 1
-        fi
-        
-        # Create checksums
-        for ipk in luci-app-ndsvoucher*.ipk; do
-          if [ -f "$ipk" ]; then
-            sha256sum "$ipk" > "${ipk}.sha256"
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Get Version
+        id: version
+        run: |
+          echo "version=$(grep 'PKG_VERSION:=' ./luci-app-ndsvoucher/Makefile | awk -F '=' '{print $2}')" >> $GITHUB_OUTPUT
+
+  Compile:
+    runs-on: ubuntu-latest
+    needs: Get-Version
+    strategy:
+      matrix:
+        target:
+          - { name: ipk, sdk_url: "https://downloads.openwrt.org/releases/23.03.3/targets/x86/64/openwrt-sdk-23.03.3-x86-64_gcc-11.2.0_musl.Linux-x86_64.tar.xz", sdk_tar: "SDK.tar.xz", sdk_dir: "SDK", artifact_pattern: "luci-app-ndsvoucher_*.ipk" }
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Install Dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install build-essential libncurses5-dev gawk git subversion libssl-dev gettext unzip wget curl
+
+      - name: Download SDK
+        run: |
+          mkdir -p tmp
+          curl -SLk --connect-timeout 30 --retry 2 "${{ matrix.target.sdk_url }}" -o "./tmp/${{ matrix.target.sdk_tar }}"
+          cd tmp
+          tar xf ${{ matrix.target.sdk_tar }}
+          mv openwrt-sdk-* ${{ matrix.target.sdk_dir }}
+
+      - name: Copy Package Source
+        run: |
+          mkdir -p tmp/${{ matrix.target.sdk_dir }}/package/luci-app-ndsvoucher
+          cp -rf ./luci-app-ndsvoucher/. tmp/${{ matrix.target.sdk_dir }}/package/luci-app-ndsvoucher/
+
+      - name: Compile Package
+        run: |
+          cd tmp/${{ matrix.target.sdk_dir }}
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          make defconfig
+          make package/luci-app-ndsvoucher/compile V=99
+
+      - name: Check Build Results
+        run: |
+          if [ ! -f "tmp/${{ matrix.target.sdk_dir }}/bin/packages/x86_64/luci/luci-app-ndsvoucher_*.ipk" ]; then
+            echo "Build failed: IPK file not found"
+            ls -R tmp/${{ matrix.target.sdk_dir }}/bin/
+            exit 1
           fi
-        done
-      
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: luci-app-ndsvoucher-ipk
-        path: |
-          luci-app-ndsvoucher*.ipk
-          luci-app-ndsvoucher*.ipk.sha256
 
-  release:
-    name: Create GitHub Release
-    needs: build
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ndsvoucher-${{ matrix.target.name }}
+          path: tmp/${{ matrix.target.sdk_dir }}/bin/packages/x86_64/luci/luci-app-ndsvoucher_*.ipk
+
+  Release:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-
+    needs: [Compile, Get-Version]
     steps:
-    - name: Download all build artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: artifacts
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
 
-    - name: List downloaded artifacts
-      run: ls -R artifacts
+      - name: Download IPK Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ndsvoucher-ipk
+          path: ./
 
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          artifacts/luci-app-ndsvoucher-ipk/luci-app-ndsvoucher*.ipk
-          artifacts/luci-app-ndsvoucher-ipk/luci-app-ndsvoucher*.ipk.sha256
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            luci-app-ndsvoucher_*.ipk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
