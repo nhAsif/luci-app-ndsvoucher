@@ -159,6 +159,9 @@ jobs:
             fi
           fi
           cd tmp
+          # Clean up any existing SDK directory
+          rm -rf openwrt-sdk*
+          rm -rf ${{ matrix.target.sdk_dir }}
           # Verify the download
           if [ ! -s "${{ matrix.target.sdk_tar }}" ]; then
             echo "Downloaded file is empty"
@@ -167,12 +170,18 @@ jobs:
           fi
           # Check file type
           file ${{ matrix.target.sdk_tar }}
-          # Try to list contents without extracting
+          # Check file size
+          FILE_SIZE=$(stat -c%s "${{ matrix.target.sdk_tar }}")
+          echo "Downloaded file size: $FILE_SIZE bytes"
+          if [ "$FILE_SIZE" -lt 1000000 ]; then  # Less than 1MB
+            echo "WARNING: Downloaded file seems too small, may be incomplete"
+          fi
+          # Try to list contents without extracting (redirect stderr to avoid write errors)
           echo "Checking archive contents:"
           if [[ "${{ matrix.target.sdk_tar }}" == *.tar.xz ]]; then
-            tar -tvJf ${{ matrix.target.sdk_tar }} | head -10 || echo "Failed to list tar.xz contents"
+            tar -tvJf ${{ matrix.target.sdk_tar }} 2>/dev/null | head -10 || echo "Failed to list tar.xz contents"
           else
-            tar -tvf ${{ matrix.target.sdk_tar }} | head -10 || echo "Failed to list tar contents"
+            tar -tvf ${{ matrix.target.sdk_tar }} 2>/dev/null | head -10 || echo "Failed to list tar contents"
           fi
           # Extract with verbose output to see what's happening
           echo "Extracting SDK..."
@@ -181,15 +190,60 @@ jobs:
           else
             tar xf ${{ matrix.target.sdk_tar }}
           fi
-          SDK_DIR=$(tar tf ${{ matrix.target.sdk_tar }} | head -1n | cut -d'/' -f1)
+          # Get the SDK directory name (using multiple methods for robustness)
+          SDK_DIR=""
+          
+          # Method 1: First entry in archive
+          SDK_DIR=$(tar tf ${{ matrix.target.sdk_tar }} 2>/dev/null | head -n1 | cut -d'/' -f1 | grep -E "^openwrt-sdk" || true)
+          
+          # Method 2: If method 1 failed, look for directory entries
           if [ -z "$SDK_DIR" ]; then
-            echo "Could not determine SDK directory name"
-            tar tf ${{ matrix.target.sdk_tar }} | head -20
-            exit 1
+            SDK_DIR=$(tar tf ${{ matrix.target.sdk_tar }} 2>/dev/null | grep -E "^[^/]+/$" | head -n1 | cut -d'/' -f1 | grep -E "^openwrt-sdk" || true)
           fi
-          mv "$SDK_DIR" ${{ matrix.target.sdk_dir }}
+          
+          # Method 3: If still failed, use pattern matching
+          if [ -z "$SDK_DIR" ]; then
+            echo "Could not determine SDK directory name from archive contents"
+            echo "Listing first 20 lines of archive contents:"
+            tar tf ${{ matrix.target.sdk_tar }} 2>/dev/null | head -n20
+            SDK_DIR="openwrt-sdk*"  # Use pattern matching as fallback
+          else
+            echo "Detected SDK directory name: $SDK_DIR"
+          fi
+          # Move the SDK directory
+          echo "Moving SDK directory..."
+          if ls $SDK_DIR >/dev/null 2>&1; then
+            # Pattern matching worked
+            mv $SDK_DIR ${{ matrix.target.sdk_dir }}
+          else
+            # Try to find and move the SDK directory
+            SDK_EXTRACTED_DIR=$(ls -1d openwrt-sdk* 2>/dev/null | head -n1)
+            if [ -n "$SDK_EXTRACTED_DIR" ] && [ -d "$SDK_EXTRACTED_DIR" ]; then
+              mv "$SDK_EXTRACTED_DIR" ${{ matrix.target.sdk_dir }}
+            else
+              echo "Failed to locate extracted SDK directory"
+              ls -la | grep openwrt-sdk || echo "No openwrt-sdk directory found"
+              exit 1
+            fi
+          fi
           echo "SDK extracted to ${{ matrix.target.sdk_dir }}"
           ls -la ${{ matrix.target.sdk_dir }}/
+          
+          # Verify SDK extraction
+          if [ ! -d "${{ matrix.target.sdk_dir }}" ]; then
+            echo "ERROR: SDK directory was not created successfully"
+            ls -la
+            exit 1
+          fi
+          
+          # Check for essential SDK files
+          if [ ! -f "${{ matrix.target.sdk_dir }}/scripts/feeds" ]; then
+            echo "ERROR: SDK scripts not found, extraction may have failed"
+            ls -la ${{ matrix.target.sdk_dir }}/
+            exit 1
+          fi
+          
+          echo "SDK verification passed"
 
       - name: Verify Package Structure
         run: |
